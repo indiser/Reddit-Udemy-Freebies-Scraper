@@ -20,14 +20,11 @@ response=requests.get(url=reddit_url,headers=headers)
 
 data=html.unescape(response.json()["data"]["children"][1]["data"]["selftext"])
 
-with open("C:/Users/ranab/OneDrive/Desktop/Reddit Scraper/courses.txt", "w", encoding="utf-8") as filp:
+with open("courses.txt", "w", encoding="utf-8") as filp:
     filp.write(data)
 
-with open("C:/Users/ranab/OneDrive/Desktop/Reddit Scraper/courses.txt", "r", encoding="utf-8") as filp:
-    contents=filp.readlines()
-
 print("--- Scraper Hit Verification ---")
-for course in contents:
+for course in data:
     if re.search(PATTERN, course):
         print(f"Match found: {course.strip()}")
     else:
