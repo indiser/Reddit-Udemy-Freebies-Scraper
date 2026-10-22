@@ -1,69 +1,65 @@
 # Reddit Udemy Freebies Scraper
 
-A Python-based web scraper that monitors Reddit's r/udemyfreeebies subreddit to automatically detect and notify you about **"100 Days of Code: The Complete Python Pro Bootcamp by Angela Yu"** when it becomes available for free.
+A Python scraper that monitors r/udemyfreeebies to detect when **"100 Days of Code: The Complete Python Pro Bootcamp by Angela Yu"** is posted for free.
 
-## Overview
+## Why RSS Instead of the JSON API?
 
-This project scrapes the r/udemyfreeebies subreddit using Reddit's JSON API and searches for posts matching specific course patterns. When a match is found, it displays the post details including the title and direct link.
+Reddit's `.json` API endpoint is **completely dead for unauthenticated requests** — it returns a login wall regardless of headers or user-agent spoofing. Even with authentication, it's unreliable and heavily rate-limited.
 
-> ⚠️ **Important:** Reddit's unauthenticated `.json` API is no longer publicly accessible — it returns a login wall or error for anonymous requests. This scraper requires you to provide your own Reddit session cookies via a `cookies.json` file (see setup below).
+This scraper uses Reddit's **RSS feed** (`.rss`) instead, which:
+- Still returns structured post data
+- Works with session cookie authentication via `curl_cffi`
+- Is parsed cleanly using `feedparser` + `BeautifulSoup`
 
-## Features
-
-✅ **Authenticated Scraping** - Uses your Reddit session cookies to bypass the login wall  
-✅ **TLS Fingerprint Spoofing** - Uses `curl_cffi` to impersonate a real Chrome browser  
-✅ **Flexible Pattern Matching** - Detects multiple variations of course names and instructor names  
-✅ **Case-Insensitive Search** - Matches regardless of text case  
-✅ **Error Handling** - Gracefully handles rate limiting and connection errors  
-✅ **Formatted Output** - Clean, easy-to-read match notifications
+> ⚠️ The RSS feed also requires authentication. You must supply your Reddit session cookies via `cookies.json` (see setup below).
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Main scraper script with real-time verification |
-| `one_time.py` | One-time data collection script (legacy) |
+| `main.py` | Main scraper — scans latest posts and prints any matches |
+| `one_time.py` | One-time script — finds the megathread and saves all courses to `courses.txt` |
 | `cookies.json` | Your Reddit session cookies (required — see setup below) |
-| `courses.txt` | Output file storing course data |
+| `courses.txt` | Output file written by `one_time.py` |
+| `requirements.txt` | Python dependencies |
 
 ## Installation
 
 ### Prerequisites
 - Python 3.7+
-- pip (Python package manager)
 - A Reddit account (free)
 - [Cookie Editor](https://cookie-editor.com/) browser extension
 
-### Dependencies
-
-Install required packages:
-
-```bash
-pip install curl_cffi
-```
-
-Or using the requirements file:
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
+Or manually:
+
+```bash
+pip install curl_cffi feedparser beautifulsoup4
+```
+
 ## Cookie Setup (Required)
 
-Reddit blocked unauthenticated access to the `.json` API. You must supply your own session cookies.
+Both scripts load `cookies.json` to authenticate with Reddit. Without valid cookies, the RSS feed returns a login wall.
 
-1. Install the **[Cookie Editor](https://cookie-editor.com/)** extension for your browser (available for Chrome and Firefox)
-2. Log in to [reddit.com](https://www.reddit.com) in your browser
+1. Install the **[Cookie Editor](https://cookie-editor.com/)** extension (Chrome or Firefox)
+2. Log in to [reddit.com](https://www.reddit.com)
 3. Navigate to [r/udemyfreeebies](https://www.reddit.com/r/udemyfreeebies/)
 4. Click the Cookie Editor extension icon
 5. Click **Export → Export as JSON**
-6. Save the exported content as `cookies.json` in the project root directory (replacing the existing placeholder file)
+6. Save the file as `cookies.json` in the project root, replacing the existing placeholder
 
-> ⚠️ Cookies expire periodically. If you get a `403` or login-wall response, repeat the export steps above to refresh `cookies.json`.
+> ⚠️ Cookies expire periodically. If you get a `403` or empty feed, re-export from Cookie Editor.
 
 ## Usage
 
-### Run the Main Scraper
+### `main.py` — Scan Latest Posts for a Match
+
+Fetches the latest posts from the RSS feed and checks each one against the pattern.
 
 ```bash
 python main.py
@@ -72,133 +68,128 @@ python main.py
 **Output Example:**
 ```
 --- Scraper Hit Verification ---
-Scraping https://www.reddit.com/r/udemyfreeebies/.json?limit=10...
+Scraping https://www.reddit.com/r/udemyfreeebies/.rss?limit=10...
 
-• [Course Title 1]
-• [Course Title 2]
+- Udemy Free Courses - June 2025
+- 100 Days of Code: The Complete Python Pro Bootcamp by Angela Yu
 
 ========================================
-🔥 MATCH FOUND!
+MATCH FOUND!
 Title: 100 Days of Code: The Complete Python Pro Bootcamp by Angela Yu
-Link: https://www.udemy.com/course/...
+Link: https://www.udemy.com/course/100-days-of-code/
 ========================================
 ```
 
-### Run One-Time Collection
+### `one_time.py` — Extract All Courses from the Megathread
+
+Finds the pinned "Udemy Free Courses" megathread, parses all course links from the post body, and saves them to `courses.txt`.
 
 ```bash
 python one_time.py
 ```
 
-Scrapes the subreddit and saves course data to `courses.txt` for manual filtering.
+Output is written to `courses.txt` in markdown format:
+```
+# Udemy Free Courses - June 2025
+
+* Course Name [REDEEM OFFER](https://udemy.com/...)
+* ...
+```
 
 ## How It Works
 
-1. **Loads Cookies** - Reads `cookies.json` and injects them into the session
-2. **Fetches Posts** - Connects to Reddit's JSON API as an authenticated browser session
-3. **Parses Data** - Extracts post titles and body text
-4. **Pattern Matching** - Uses regex to search for matching course names
-5. **Displays Results** - Prints matched posts with links
+### `main.py`
+1. Loads `cookies.json` and injects cookies into a `curl_cffi` session (impersonating Chrome 120)
+2. Fetches `https://www.reddit.com/r/udemyfreeebies/.rss?limit=10`
+3. Parses the Atom feed with `feedparser`
+4. For each entry, strips HTML from the post body using `BeautifulSoup`
+5. Runs the regex pattern against the title + body text
+6. Prints any matches with their Udemy link
 
-### Pattern Matching Logic
+### `one_time.py`
+1. Same cookie + session setup as `main.py`
+2. Fetches the RSS feed and finds the entry titled "Udemy Free Courses"
+3. Parses all `<li>` elements from the post HTML
+4. Extracts course titles and Udemy URLs
+5. Writes everything to `courses.txt`
 
-```
-✓ "100 Days of Code" + "Angela Yu" (in any order)
-✓ "100 Days of Code: The Complete Python Pro Bootcamp"
-```
-
-## Technical Details
-
-### Regex Pattern
+## Pattern Matching
 
 ```python
 PATTERN = re.compile(
-    r"(100.*days.*code.*angela.*yu)|"              # Course ... Instructor
-    r"(angela.*yu.*100.*days.*code)|"              # Instructor ... Course
-    r"(100\s*days\s*of\s*code.*python\s*pro\s*bootcamp)", # Full Title
+    r"(100.*days.*code.*angela.*yu)|"               # Course ... Instructor
+    r"(angela.*yu.*100.*days.*code)|"               # Instructor ... Course
+    r"(100\s*days\s*of\s*code.*python\s*pro\s*bootcamp)",  # Full title
     re.IGNORECASE
 )
 ```
 
+Matches any of:
+- `"100 Days of Code"` + `"Angela Yu"` in any order
+- `"100 Days of Code: The Complete Python Pro Bootcamp"` (no instructor needed)
+
+## Technical Details
+
 ### Why `curl_cffi`?
 
-Reddit detects and blocks standard `requests` library calls based on TLS fingerprinting. `curl_cffi` impersonates a real Chrome browser at the TLS level, making requests indistinguishable from a normal browser visit.
+Reddit blocks the standard `requests` library via TLS fingerprinting. `curl_cffi` impersonates Chrome 120 at the TLS level, making the request indistinguishable from a real browser.
 
-### API Endpoint
+### Feed Endpoint
 
-- **URL**: `https://www.reddit.com/r/udemyfreeebies/.json?limit=10`
+- **URL**: `https://www.reddit.com/r/udemyfreeebies/.rss?limit=10`
+- **Format**: Atom XML (parsed by `feedparser`)
 - **Auth**: Session cookies from `cookies.json`
-- **Rate Limit**: ~60 requests/minute
 
 ## Error Handling
 
-- **403 / Login wall** - Cookies are missing, expired, or invalid — re-export from Cookie Editor
-- **429 Status Code** - Rate limited by Reddit — wait before retrying
-- **Connection Errors** - Network failures
-- **Invalid JSON** - Malformed API responses
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `403` / login wall | Cookies missing, expired, or invalid | Re-export `cookies.json` from Cookie Editor |
+| `429` | Rate limited by Reddit | Wait and retry |
+| `CRITICAL FAILURE` | Network error or unexpected response | Check internet connection |
+| Empty feed / no entries | Cookie issue or subreddit unavailable | Verify cookies are fresh |
 
 ## Customization
 
-### Change Target Course
+### Track a Different Course
 
-Edit the `PATTERN` variable in `main.py`:
+Edit `PATTERN` in `main.py` or `one_time.py`:
 
 ```python
-PATTERN = re.compile(r"your.*course.*name.*here", re.IGNORECASE)
+PATTERN = re.compile(r"your.*course.*name", re.IGNORECASE)
 ```
 
-### Adjust Search Limit
+### Change the Post Limit
 
 ```python
 limit = 25  # top of main.py
 ```
 
-### Add Email Notifications
-
-```python
-if PATTERN.search(full_text):
-    send_email_notification(title, url)  # add your email logic
-```
-
 ## Limitations
 
-⚠️ **Cookie Expiry** - Reddit session cookies expire; you'll need to re-export periodically  
-⚠️ **Rate Limiting** - Reddit allows ~60 requests/minute  
-⚠️ **Subreddit Availability** - Relies on r/udemyfreeebies being active  
-⚠️ **Manual Monitoring** - Doesn't auto-monitor periodically
+- **Cookie Expiry** — Reddit cookies expire; re-export periodically
+- **Rate Limiting** — ~60 requests/minute
+- **Manual Execution** — No built-in scheduler; run manually or via cron/Task Scheduler
 
 ## Future Enhancements
 
-- [ ] Scheduled background monitoring using `schedule` library
-- [ ] Email/Discord notifications on match found
+- [ ] Periodic auto-monitoring with `schedule`
+- [ ] Email or Discord notification on match
 - [ ] Auto cookie refresh via browser automation
-- [ ] Multiple course tracking
+- [ ] Track multiple courses simultaneously
 
 ## Dependencies
 
-- **curl_cffi** - HTTP library with Chrome TLS fingerprint impersonation
+| Package | Purpose |
+|---------|---------|
+| `curl_cffi` | HTTP requests with Chrome TLS fingerprint impersonation |
+| `feedparser` | Parses Reddit's Atom RSS feed |
+| `beautifulsoup4` | Strips HTML from post body content |
 
 ## License
 
-This project is for educational purposes. Ensure compliance with Reddit's Terms of Service and Udemy's policies.
-
-## Disclaimer
-
-This tool is provided as-is. The author is not responsible for:
-- Account bans due to excessive API requests
-- Missed course opportunities
-- Changes to Reddit/Udemy APIs
-- Cookie expiry causing missed results
-
-## Contact & Support
-
-For issues, ensure you have:
-- ✓ Latest Python version installed
-- ✓ `curl_cffi` installed (`pip install curl_cffi`)
-- ✓ Fresh `cookies.json` exported from Cookie Editor
-- ✓ Valid internet connection
+For educational purposes. Ensure compliance with Reddit's Terms of Service and Udemy's policies.
 
 ---
 
-**Last Updated:** September 2026
-**Status:** ✅ Active & Maintained
+**Status:** ✅ Active — using RSS feed (`.json` API is dead)
