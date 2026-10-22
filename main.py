@@ -1,11 +1,12 @@
 from curl_cffi import requests
-import html
 import re
 import json
+import feedparser
+from bs4 import BeautifulSoup
 
 # 1. CONSTANTS
 limit=10
-SUBREDDIT_URL = f"https://www.reddit.com/r/udemyfreeebies/.json?limit={limit}"
+SUBREDDIT_URL = f"https://www.reddit.com/r/udemyfreeebies/.rss?limit={limit}"
 
 with open("cookies.json", "r", encoding="utf-8") as filp:
     raw_cookies = json.load(filp)
@@ -21,7 +22,7 @@ PATTERN = re.compile(
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json",
+    "Accept": "application/atom+xml",
     "Accept-Language": "en-US,en;q=0.9",
     "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
     "Sec-Ch-Ua-Mobile": "?0",
@@ -43,26 +44,23 @@ try:
     if response.status_code != 200:
         raise Exception(f"Error: {response.status_code}")
 
-    data = response.json()
-    posts = data["data"]["children"]
-    
+    feed = feedparser.parse(response.content)
     found_count = 0
 
-    for post in posts:
-        post_data = post["data"]
-        
-        title = html.unescape(post_data.get("title", ""))
-        selftext = html.unescape(post_data.get("selftext", ""))
+    for entry in feed.entries[1:]:
+        title = entry.title
+        html_body = entry.content[0].value if entry.get("content") else ""
+        selftext = BeautifulSoup(html_body, "html.parser").get_text("\n", strip=True)
         full_text = f"{title} \n {selftext}"
 
-        print(f"• {title}")
+        print(f"- {title}")
 
         if PATTERN.search(full_text):
-            print("\n" + "="*40)
-            print(f"🔥 MATCH FOUND!")
+            print("\n" + "=" * 40)
+            print("MATCH FOUND!")
             print(f"Title: {title}")
-            print(f"Link: {post_data.get('url')}")
-            print("="*40)
+            print(f"Link: {entry.link}")
+            print("=" * 40)
             found_count += 1
 
     if found_count == 0:
